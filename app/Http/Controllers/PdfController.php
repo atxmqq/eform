@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\FormSubmission;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests; // เพิ่มบรรทัดนี้
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class PdfController extends Controller
 {
+    use AuthorizesRequests; // เพิ่มบรรทัดนี้
+
     public function download(FormSubmission $submission)
     {
         $this->authorize('view', $submission);
@@ -61,6 +64,7 @@ class PdfController extends Controller
             'thesis_registration' => 'pdf.thesis-registration',
             'special_status'      => 'pdf.special-status',
             'restore_status'      => 'pdf.restore-status',
+            'reinstatement'       => 'pdf.reinstatement', // เพิ่มตัวนี้เข้าไป!
         ];
 
         $view = $viewMap[$code] ?? null;

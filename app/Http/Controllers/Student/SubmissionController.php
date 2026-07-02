@@ -92,6 +92,28 @@ class SubmissionController extends Controller
         }
         $request->validate($rules);
 
+        // Reinstatement validation: ตรวจสอบข้อมูลเฉพาะของคำร้องคืนสภาพ
+        if ($formType->code === 'reinstatement') {
+            $request->validate([
+                'loss_reason_type' => 'required|in:not_paid,not_enrolled',
+                'missed_semesters_count' => 'required_if:loss_reason_type,not_paid|nullable|numeric|min:1',
+                'missed_semester_details' => 'required_if:loss_reason_type,not_paid|nullable|string|max:255',
+
+                // เพิ่ม Validation สำหรับช่องใหม่
+                'retain_status_semester' => 'required|in:1,2',
+                'retain_status_year' => 'required|string|max:4',
+                'leave_from_semester' => 'nullable|in:1,2',
+                'leave_from_year' => 'nullable|string|max:4',
+                'leave_to_semester' => 'nullable|in:1,2',
+                'leave_to_year' => 'nullable|string|max:4',
+            ], [
+                'loss_reason_type.required' => 'กรุณาเลือกสาเหตุที่พ้นสภาพการเป็นนิสิต',
+                'missed_semesters_count.required_if' => 'กรุณาระบุจำนวนภาคเรียนที่ไม่ได้ชำระเงิน',
+                'missed_semester_details.required_if' => 'กรุณาระบุว่าคือภาคเรียนที่เท่าไหร่',
+                'retain_status_semester.required' => 'กรุณาเลือกภาคการศึกษาที่ต้องการขอคืนสภาพ',
+                'retain_status_year.required' => 'กรุณาระบุปีการศึกษาที่ต้องการขอคืนสภาพ',
+            ]);
+        }
         // Restore status: validate all 12 condition questions and check at least one case passes
         $passedCase = null;
         if ($formType->code === 'special_status') {
@@ -192,6 +214,34 @@ class SubmissionController extends Controller
                     }
                 }
             }
+
+            // Store custom fields for reinstatement (บันทึกข้อมูลเฉพาะของคำร้องคืนสภาพ)
+            // Store custom fields for reinstatement (บันทึกข้อมูลเฉพาะของคำร้องคืนสภาพ)
+            if ($formType->code === 'reinstatement') {
+                $reinstatementFields = [
+                    'loss_reason_type',
+                    'missed_semesters_count',
+                    'missed_semester_details',
+
+                    // เพิ่มรายชื่อช่องใหม่ตรงนี้
+                    'retain_status_semester',
+                    'retain_status_year',
+                    'leave_from_semester',
+                    'leave_from_year',
+                    'leave_to_semester',
+                    'leave_to_year'
+                ];
+
+                foreach ($reinstatementFields as $customKey) {
+                    if ($request->has($customKey) && $request->input($customKey) !== null) {
+                        SubmissionFieldValue::create([
+                            'submission_id' => $submission->id,
+                            'field_key'     => $customKey,
+                            'value'         => (string) $request->input($customKey),
+                        ]);
+                    }
+                }
+            }
         });
 
         // Send email to advisor if the form has an advisor_select field
@@ -245,10 +295,12 @@ class SubmissionController extends Controller
             ->paginate(15);
         return view('student.submissions.index', compact('submissions'));
     }
-
     public function show(FormSubmission $submission)
     {
-        $this->authorize('view', $submission);
+        if ($submission->submitter_id !== auth()->id()) {
+            abort(403, 'คุณไม่มีสิทธิ์เข้าถึงคำร้องนี้');
+        }
+
         $submission->load(['formType.fields', 'fieldValues', 'approvals.workflowStep', 'approvals.approver']);
         return view('student.submissions.show', compact('submission'));
     }
